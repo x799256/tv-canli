@@ -35,10 +35,10 @@ jobs:
           video_id="ChS5CcxbXlc"
         fi
 
-        # ID-ni birbaşa SƏNİN işlək worker linkinə birləşdiririk
-        m3u8_direct_url="http://movies.yt-hls.workers.dev/${video_id}.m3u8"
+        # 🔒 LINKI HTTPS EDİRİK Kİ PLEYER BLOKLAMASIN
+        m3u8_direct_url="https://movies.yt-hls.workers.dev/${video_id}.m3u8"
 
-        # Əsas M3U pleylist faylını yaradırıq (Pleyer məhz bu faylı oxuyacaq)
+        # Əsas M3U pleylist faylını yaradırıq
         echo "#EXTM3U" > playlist.m3u
         echo "#EXTINF:-1, Mənim 24/7 Canlı Kanalım" >> playlist.m3u
         echo "$m3u8_direct_url" >> playlist.m3u
