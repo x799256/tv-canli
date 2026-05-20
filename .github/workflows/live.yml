@@ -12,12 +12,12 @@ jobs:
     - name: Kodu Yüklə
       uses: actions/checkout@v3
 
-    - name: Canlı Yayım Linkini Sazla
+    - name: Canlı Yayım Linkini Hazırla
       run: |
         current_seconds=$(date +%s)
         video_index=$(( (current_seconds / 300) % 3 ))
 
-        # ⚠️ BURA REALLIQDA KOPYALADIĞIN YOUTUBE LINKINI QOYURSAN:
+        # ⚠️ BURA REALLIQDA KOPYALADIĞIN ORIJINAL YOUTUBE LINKINI QOYURSAN:
         if [ $video_index -eq 0 ]; then
           raw_url="https://www.youtube.com/watch?v=ChS5CcxbXlc"
         elif [ $video_index -eq 1 ]; then
@@ -26,7 +26,7 @@ jobs:
           raw_url="https://www.youtube.com/watch?v=c6-nkNe2W2I"
         fi
 
-        # Linkin içindən YouTube ID-sini avtomatik kəsirik
+        # Linkin içindən YouTube ID-sini avtomatik kəsən hissə
         if [[ "$raw_url" == *"v="* ]]; then
           video_id=$(echo "$raw_url" | sed -n 's/.*v=\([^&]*\).*/\1/p')
         elif [[ "$raw_url" == *"youtu.be/"* ]]; then
@@ -35,10 +35,10 @@ jobs:
           video_id="ChS5CcxbXlc"
         fi
 
-        # YouTube-un rəsmi və qorunmayan birbaşa hls yayım şablonu
-        m3u8_direct_url="https://www.youtube.com/api/manifest/hls_variant/id/${video_id}/itype/playlist/mime/application%2Fx-mpegURL/source/yt_live_broadcast/file/index.m3u8"
+        # ID-ni birbaşa SƏNİN işlək worker linkinə birləşdiririk
+        m3u8_direct_url="http://movies.yt-hls.workers.dev/${video_id}.m3u8"
 
-        # Əsas M3U pleylist faylını yaradırıq
+        # Əsas M3U pleylist faylını yaradırıq (Pleyer məhz bu faylı oxuyacaq)
         echo "#EXTM3U" > playlist.m3u
         echo "#EXTINF:-1, Mənim 24/7 Canlı Kanalım" >> playlist.m3u
         echo "$m3u8_direct_url" >> playlist.m3u
