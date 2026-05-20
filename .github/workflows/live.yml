@@ -1,0 +1,83 @@
+name: 24/7 M3U Canlı Kanal Yeniləyici
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Hər 5 dəqiqədən bir avtomatik işə düşür
+  workflow_dispatch: # İstədiyin vaxt əllə də başlada bilərsən
+
+jobs:
+  update-playlist:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Kodu Yüklə
+      uses: actions/checkout@v3
+
+    - name: Canlı Yayım Siyahısını Hazırla
+      run: |
+        # 1. ÖZ REAL YOUTUBE LİNKLƏRİNİZ VƏ MÜDDƏTLƏRİ (Saniyə ilə)
+        # Bura istədiyin qədər video əlavə edə bilərsən
+        declare -A videos
+        videos[0]="http://movies.yt-hls.workers.dev/ChS5CcxbXlc.m3u8|350"
+        videos[1]="http://movies.yt-hls.workers.dev/PWFKYZ9cbis.m3u8|240"
+        videos[2]="http://movies.yt-hls.workers.dev/c6-nkNe2W2I.m3u8|600"
+
+        # Ümumi müddəti hesablamaq
+        total_duration=0
+        for vid in "${videos[@]}"; do
+          IFS='|' read -r url dur <<< "$vid"
+          total_duration=$((total_duration + dur))
+        done
+
+        # Hazırkı vaxta görə hansı videonun hansı saniyədə olduğunu tapmaq
+        current_seconds=$(date +%s)
+        current_playlist_time=$((current_seconds % total_duration))
+
+        elapsed_time=0
+        target_url=""
+        for i in "${!videos[@]}"; do
+          IFS='|' read -r url dur <<< "${videos[$i]}"
+          if [ $current_playlist_time -ge $elapsed_time ] && [ $current_playlist_time -lt $((elapsed_time + dur)) ]; then
+            target_url=$url
+            break
+          fi
+          elapsed_time=$((elapsed_time + dur))
+        done
+
+        # YouTube-dan həmin videonun canlı parçalarını çəkirik
+        curl -s -A "Mozilla/5.0" "$target_url" -o original.m3u8
+        base_url=$(echo "$target_url" | grep -oE 'https?://[^ ]+/')
+
+        # Pleyer üçün 24/7 Canlı TV manifesti formalaşdırırıq
+        echo "#EXTM3U" > live.m3u8
+        echo "#EXT-X-VERSION:3" >> live.m3u8
+        echo "#EXT-X-TARGETDURATION:10" >> live.m3u8
+        echo "#EXT-X-MEDIA-SEQUENCE:$((current_seconds / 10))" >> live.m3u8
+        echo "#EXT-X-DISCONTINUITY" >> live.m3u8
+
+        while IFS= read -r line; do
+          if [[ "$line" =~ ^#EXTINF: ]]; then
+            echo "$line" >> live.m3u8
+          elif [[ -n "$line" && ! "$line" =~ ^# ]]; then
+            if [[ "$line" =~ ^http ]]; then
+              echo "$line" >> live.m3u8
+            else
+              echo "${base_url}${line}" >> live.m3u8
+            fi
+          fi
+        done < original.m3u8
+
+        # Sonluğu silirik ki pleyer dayanmasın
+        sed -i '/#EXT-X-ENDLIST/d' live.m3u8
+
+        # IPTV Pleyeriniz üçün əsas M3U faylını yaradırıq
+        echo "#EXTM3U" > playlist.m3u
+        echo "#EXTINF:-1, Mənim 24/7 Canlı Kanalım" >> playlist.m3u
+        echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/live.m3u8" >> playlist.m3u
+
+    - name: Dəyişiklikləri GitHub Pages-ə Göndər
+      run: |
+        git config --global user.name "GitHub Action"
+        git config --global user.email "action@github.com"
+        git add live.m3u8 playlist.m3u
+        git commit -m "Canlı yayın yeniləndi [skip ci]" || exit 0
+        git push origin main
