@@ -12,17 +12,7 @@ jobs:
     - name: Kodu Yüklə
       uses: actions/checkout@v3
 
-    - name: Python Sazla
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
-
-    - name: Lazımi Alətləri Yüklə
-      run: |
-        python -m pip install --upgrade pip
-        pip install yt-dlp
-
-    - name: Canlı Yayım Linkini Çıxart və Hazırla
+    - name: Canlı Yayım Linkini Sazla
       run: |
         current_seconds=$(date +%s)
         video_index=$(( (current_seconds / 300) % 3 ))
@@ -36,13 +26,17 @@ jobs:
           raw_url="https://www.youtube.com/watch?v=c6-nkNe2W2I"
         fi
 
-        # yt-dlp vasitəsilə YouTube-dan birbaşa işlək m3u8 linkini alırıq
-        m3u8_direct_url=$(yt-dlp -g -f best "$raw_url" || echo "")
-
-        if [ -z "$m3u8_direct_url" ]; then
-          echo "YouTube linki oxunmadı, ehtiyat link qoyulur."
-          m3u8_direct_url="https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8"
+        # Linkin içindən YouTube ID-sini avtomatik kəsirik
+        if [[ "$raw_url" == *"v="* ]]; then
+          video_id=$(echo "$raw_url" | sed -n 's/.*v=\([^&]*\).*/\1/p')
+        elif [[ "$raw_url" == *"youtu.be/"* ]]; then
+          video_id=$(echo "$raw_url" | sed 's/.*youtu.be\///' | cut -d'?' -f1)
+        else
+          video_id="ChS5CcxbXlc"
         fi
+
+        # YouTube-un rəsmi və qorunmayan birbaşa hls yayım şablonu
+        m3u8_direct_url="https://www.youtube.com/api/manifest/hls_variant/id/${video_id}/itype/playlist/mime/application%2Fx-mpegURL/source/yt_live_broadcast/file/index.m3u8"
 
         # Əsas M3U pleylist faylını yaradırıq
         echo "#EXTM3U" > playlist.m3u
