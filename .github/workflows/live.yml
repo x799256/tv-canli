@@ -35,8 +35,8 @@ jobs:
           video_id="PWFKYZ9cbis"
         fi
 
-        # 🌐 Bloklanmayan, qlobal sabit YouTube Live M3U8 API şablonu
-        m3u8_direct_url="https://rawgits.com/rambofreak/rambofreak.github.io/master/yt.php?id=${video_id}"
+        # 🔒 Google-un heç vaxt bloklamadığı rəsmi axın şablonu
+        m3u8_direct_url="https://www.youtube.com/embed/${video_id}?autoplay=1"
 
         # Əsas M3U pleylist faylını yaradırıq
         echo "#EXTM3U" > playlist.m3u
