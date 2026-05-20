@@ -2,8 +2,8 @@ name: 24/7 M3U Canlı Kanal Yeniləyici
 
 on:
   schedule:
-    - cron: '*/5 * * * *' # Hər 5 dəqiqədən bir avtomatik işə düşür
-  workflow_dispatch: # İstədiyin vaxt əllə də başlada bilərsən
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
   update-playlist:
@@ -14,40 +14,38 @@ jobs:
 
     - name: Canlı Yayım Siyahısını Hazırla
       run: |
-        # 1. ÖZ REAL YOUTUBE LİNKLƏRİNİZ VƏ MÜDDƏTLƏRİ (Saniyə ilə)
-        # Bura istədiyin qədər video əlavə edə bilərsən
-        declare -A videos
-        videos[0]="http://movies.yt-hls.workers.dev/ChS5CcxbXlc.m3u8|350"
-        videos[1]="http://movies.yt-hls.workers.dev/PWFKYZ9cbis.m3u8|240"
-        videos[2]="http://movies.yt-hls.workers.dev/c6-nkNe2W2I.m3u8|600"
-
-        # Ümumi müddəti hesablamaq
-        total_duration=0
-        for vid in "${videos[@]}"; do
-          IFS='|' read -r url dur <<< "$vid"
-          total_duration=$((total_duration + dur))
-        done
-
-        # Hazırkı vaxta görə hansı videonun hansı saniyədə olduğunu tapmaq
+        # Hazırkı vaxta görə bəsit dövr hesablama (3 video üçün)
         current_seconds=$(date +%s)
-        current_playlist_time=$((current_seconds % total_duration))
+        video_index=$(( (current_seconds / 300) % 3 ))
 
-        elapsed_time=0
-        target_url=""
-        for i in "${!videos[@]}"; do
-          IFS='|' read -r url dur <<< "${videos[$i]}"
-          if [ $current_playlist_time -ge $elapsed_time ] && [ $current_playlist_time -lt $((elapsed_time + dur)) ]; then
-            target_url=$url
-            break
-          fi
-          elapsed_time=$((elapsed_time + dur))
-        done
+        # =========================================================
+        # ⚠️ BURA SADECE YOUTUBE-DAN KOPYALADIĞIN LINKLERI YAPIŞDIR:
+        # =========================================================
+        if [ $video_index -eq 0 ]; then
+          raw_url="https://www.youtube.com/watch?v=ChS5CcxbXlc"
+        elif [ $video_index -eq 1 ]; then
+          raw_url="https://www.youtube.com/watch?v=PWFKYZ9cbis"
+        else
+          raw_url="https://www.youtube.com/watch?v=c6-nkNe2W2I"
+        fi
+        # =========================================================
 
-        # YouTube-dan həmin videonun canlı parçalarını çəkirik
+        # Linkin içindən YouTube ID-sini avtomatik təmizləyən ağıllı funksiya
+        if [[ "$raw_url" == *"v="* ]]; then
+          video_id=$(echo "$raw_url" | sed -n 's/.*v=\([^&]*\).*/\1/p')
+        elif [[ "$raw_url" == *"youtu.be/"* ]]; then
+          video_id=$(echo "$raw_url" | sed 's/.*youtu.be\///' | cut -d'?' -f1)
+        else
+          video_id="ChS5CcxbXlc" # Xəta olarsa ehtiyat video
+        fi
+
+        target_url="http://movies.yt-hls.workers.dev/${video_id}.m3u8"
+
+        # M3U8 faylını yükləyirik
         curl -s -A "Mozilla/5.0" "$target_url" -o original.m3u8
         base_url=$(echo "$target_url" | grep -oE 'https?://[^ ]+/')
 
-        # Pleyer üçün 24/7 Canlı TV manifesti formalaşdırırıq
+        # Yeni canlı manifest yaradırıq
         echo "#EXTM3U" > live.m3u8
         echo "#EXT-X-VERSION:3" >> live.m3u8
         echo "#EXT-X-TARGETDURATION:10" >> live.m3u8
@@ -66,18 +64,17 @@ jobs:
           fi
         done < original.m3u8
 
-        # Sonluğu silirik ki pleyer dayanmasın
         sed -i '/#EXT-X-ENDLIST/d' live.m3u8
 
-        # IPTV Pleyeriniz üçün əsas M3U faylını yaradırıq
+        # Əsas M3U pleylist faylını yaradırıq
         echo "#EXTM3U" > playlist.m3u
         echo "#EXTINF:-1, Mənim 24/7 Canlı Kanalım" >> playlist.m3u
         echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/live.m3u8" >> playlist.m3u
 
-    - name: Dəyişiklikləri GitHub Pages-ə Göndər
+    - name: Dəyişiklikləri GitHub-a Göndər
       run: |
-        git config --global user.name "GitHub Action"
-        git config --global user.email "action@github.com"
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
         git add live.m3u8 playlist.m3u
         git commit -m "Canlı yayın yeniləndi [skip ci]" || exit 0
         git push origin main
