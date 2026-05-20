@@ -12,15 +12,22 @@ jobs:
     - name: Kodu Yüklə
       uses: actions/checkout@v3
 
-    - name: Canlı Yayım Siyahısını Hazırla
+    - name: Python Sazla
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Lazımi Alətləri Yüklə
       run: |
-        # Hazırkı vaxta görə bəsit dövr hesablama (3 video üçün)
+        python -m pip install --upgrade pip
+        pip install yt-dlp
+
+    - name: Canlı Yayım Linkini Çıxart və Hazırla
+      run: |
         current_seconds=$(date +%s)
         video_index=$(( (current_seconds / 300) % 3 ))
 
-        # =========================================================
-        # ⚠️ BURA SADECE YOUTUBE-DAN KOPYALADIĞIN LINKLERI YAPIŞDIR:
-        # =========================================================
+        # ⚠️ BURA REALLIQDA KOPYALADIĞIN YOUTUBE LINKINI QOYURSAN:
         if [ $video_index -eq 0 ]; then
           raw_url="https://www.youtube.com/watch?v=ChS5CcxbXlc"
         elif [ $video_index -eq 1 ]; then
@@ -28,53 +35,24 @@ jobs:
         else
           raw_url="https://www.youtube.com/watch?v=c6-nkNe2W2I"
         fi
-        # =========================================================
 
-        # Linkin içindən YouTube ID-sini avtomatik təmizləyən ağıllı funksiya
-        if [[ "$raw_url" == *"v="* ]]; then
-          video_id=$(echo "$raw_url" | sed -n 's/.*v=\([^&]*\).*/\1/p')
-        elif [[ "$raw_url" == *"youtu.be/"* ]]; then
-          video_id=$(echo "$raw_url" | sed 's/.*youtu.be\///' | cut -d'?' -f1)
-        else
-          video_id="ChS5CcxbXlc" # Xəta olarsa ehtiyat video
+        # yt-dlp vasitəsilə YouTube-dan birbaşa işlək m3u8 linkini alırıq
+        m3u8_direct_url=$(yt-dlp -g -f best "$raw_url" || echo "")
+
+        if [ -z "$m3u8_direct_url" ]; then
+          echo "YouTube linki oxunmadı, ehtiyat link qoyulur."
+          m3u8_direct_url="https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8"
         fi
-
-        target_url="http://movies.yt-hls.workers.dev/${video_id}.m3u8"
-
-        # M3U8 faylını yükləyirik
-        curl -s -A "Mozilla/5.0" "$target_url" -o original.m3u8
-        base_url=$(echo "$target_url" | grep -oE 'https?://[^ ]+/')
-
-        # Yeni canlı manifest yaradırıq
-        echo "#EXTM3U" > live.m3u8
-        echo "#EXT-X-VERSION:3" >> live.m3u8
-        echo "#EXT-X-TARGETDURATION:10" >> live.m3u8
-        echo "#EXT-X-MEDIA-SEQUENCE:$((current_seconds / 10))" >> live.m3u8
-        echo "#EXT-X-DISCONTINUITY" >> live.m3u8
-
-        while IFS= read -r line; do
-          if [[ "$line" =~ ^#EXTINF: ]]; then
-            echo "$line" >> live.m3u8
-          elif [[ -n "$line" && ! "$line" =~ ^# ]]; then
-            if [[ "$line" =~ ^http ]]; then
-              echo "$line" >> live.m3u8
-            else
-              echo "${base_url}${line}" >> live.m3u8
-            fi
-          fi
-        done < original.m3u8
-
-        sed -i '/#EXT-X-ENDLIST/d' live.m3u8
 
         # Əsas M3U pleylist faylını yaradırıq
         echo "#EXTM3U" > playlist.m3u
         echo "#EXTINF:-1, Mənim 24/7 Canlı Kanalım" >> playlist.m3u
-        echo "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/live.m3u8" >> playlist.m3u
+        echo "$m3u8_direct_url" >> playlist.m3u
 
     - name: Dəyişiklikləri GitHub-a Göndər
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add live.m3u8 playlist.m3u
-        git commit -m "Canlı yayın yeniləndi [skip ci]" || exit 0
+        git add playlist.m3u
+        git commit -m "Canlı yayın linki yeniləndi [skip ci]" || exit 0
         git push origin main
